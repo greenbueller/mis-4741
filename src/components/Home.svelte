@@ -140,25 +140,17 @@
 
   <!-- Render every page but hide non-active ones (keeps components mounted and reactive) -->
   <div class="pages">
-    <div class:hidden={page !== 0} aria-hidden={page !== 0}>
+    {#if page === 0}
       <PersonalInformation bind:formData curYear={curYear} />
-    </div>
-
-    <div class:hidden={page !== 1} aria-hidden={page !== 1}>
+    {:else if page === 1}
       <Insurance bind:formData curYear={curYear} />
-    </div>
-
-    <div class:hidden={page !== 2} aria-hidden={page !== 2}>
+    {:else if page === 2}
       <MedicalTreatment bind:formData curYear={curYear} />
-    </div>
-
-    <div class:hidden={page !== 3} aria-hidden={page !== 3}>
+    {:else if page === 3}
       <Additional bind:formData on:field={handleFieldEvent} />
-    </div>
-
-    <div class:hidden={page !== 4} aria-hidden={page !== 4}>
+    {:else}
       <Signature bind:formData curYear={curYear} />
-    </div>
+    {/if}
   </div>
 
   <div class="wizard-nav">
