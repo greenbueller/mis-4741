@@ -3,13 +3,13 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [svelte()],
-  server: {
-    proxy: {
-      '/submit': 'http://localhost:3000/',
-      '/form': 'http://localhost:3000/',
+  plugins: [svelte({
+    compilerOptions: {
+      compatibility: {
+        componentApi: 4
+      }
     }
-  },
+  })],
   build: {
     outDir: 'dist'
   }

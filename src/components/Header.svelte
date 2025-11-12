@@ -1,73 +1,23 @@
 <script>
-    import { onMount } from 'svelte';
-    import { getUserDisplayName } from '../utils/auth.js';
-    import * as greetings from '../utils/greetings.js';
     import Settings from './Settings.svelte';
-    import { currentTheme, themes } from '../utils/appearance.js';
 
-    export let greeting = '';
-    export let showRegister = false;
-    export let showLogin = false;
     export let showSettings = true;
-    export let authRequired = false;
-    export let navigateTo;
 
-    let displayName = '';
     let currentGreeting = '';
     let settingsComponent;
-
-    $: logoPath = (() => {
-      const themeObj = themes[$currentTheme];
-      return (themeObj?.class === 'dark-theme' || themeObj?.class === 'inverted-theme')
-        ? '/media/Magnolia-white.png'
-        : '/media/Magnolia.png';
-    })();
-
-    // Get the greeting when the component is nounted
-    onMount(() => {
-      // Get the user's display name
-        displayName = getUserDisplayName();
-        // Update their greeting based on greetings.js
-        updateGreeting();
-    })
-
-    // Function to update the greeting. Use personalized if possible, otherwise default to time-based greeting
-    function updateGreeting() {
-        if (greeting) {
-            currentGreeting = greetings.getPersonalizedGreeting(greeting, displayName);
-        } else {
-          // This should never happen, as it would only occur if a non-logged in user visits a locked page
-            currentGreeting = greetings.getTimeBasedGreeting(displayName)
-        }
-    }
-
-    // Close settings when clicking outside of the settings component
-    function handleSettingsClose() {
-        if (settingsComponent) {
-            settingsComponent.closeSettings();
-        }
-    }
-
-    $: if (displayName !== undefined || greeting) {
-        updateGreeting();
-    }
 </script>
-
-<!-- If click outside of settings window, close the settings window -->
-<svelte:window on:click={handleSettingsClose} />
 
 <!-- Header of the page -->
 <header class="app-header">
   <div class="header-top">
     <div class="header-logo" style="display: flex; align-items: center;">
-      <img id="logo" src={logoPath} alt="Magnolia" style="height: 50px; width: auto; margin-right: 10px;">
-      <h1>Magnolia</h1>
+      <h1>Fictional Company</h1>
     </div>
 
     <!-- Settings Menu -->
     {#if showSettings}
       <div class="settings-container">
-        <Settings bind:this={settingsComponent} {authRequired}/>
+        <Settings bind:this={settingsComponent}/>
       </div>
     {/if}
   </div>
@@ -76,13 +26,6 @@
   <div class="header-greeting" style="display: flex; align-items: center;">
     <span class="greeting">
       {currentGreeting}
-      <!-- For non-authenticated pages, allows for registration and logging in -->
-      {#if showRegister}
-        or <a href="/register" on:click|preventDefault={() => navigateTo && navigateTo('register')}>register</a> here
-    {/if}
-    {#if showLogin}
-        If you already have an account, please <a href="/login" on:click|preventDefault={() => navigateTo && navigateTo('login')}>login</a> to continue.
-    {/if}
     </span>
   </div>
 </header>
@@ -95,24 +38,6 @@
     justify-content: space-between;
     align-items: center;
     width: 100%;
-  }
-
-  .header-logo {
-    display: flex;
-    align-items: center;
-    flex-shrink: 0;
-  }
-
-  .header-logo h1 {
-    margin: 0;
-    margin-left: 10px;
-    color: var(--option);
-    font-size: 1.8rem;
-  }
-
-  #logo {
-    height: 50px;
-    width: auto;
   }
 
   .settings-container {
@@ -130,16 +55,6 @@
     font-size: 1rem;
     line-height: 1.4;
     display: block;
-  }
-
-  .greeting a {
-    color: var(--links);
-    text-decoration: none;
-  }
-
-  .greeting a:hover {
-    color: var(--highlight);
-    text-decoration: underline;
   }
 
   .header-divider {
@@ -199,10 +114,6 @@
       margin-left: 8px;
     }
     
-    #logo {
-      height: 40px;
-    }
-    
     .greeting {
       font-size: 0.9rem;
     }
@@ -217,10 +128,6 @@
     .header-logo h1 {
       font-size: 1.3rem;
       margin-left: 6px;
-    }
-    
-    #logo {
-      height: 35px;
     }
     
     .greeting {

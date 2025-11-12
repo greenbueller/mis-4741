@@ -3,9 +3,8 @@
   import Home from './components/Home.svelte';
 
   let currentRoute = 'home';
-  let authWatchInterval = null;
 
-  // On mounting the app, determine the current route and start auth watching
+  // On mounting the app, determine the current route
   onMount(() => {
     const path = window.location.pathname;
     currentRoute = path === '/' ? 'home' : path;

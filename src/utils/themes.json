@@ -39,6 +39,26 @@
                 "highlight": "#00a8ff",
                 "links": "#eb4d2c"
             }
+        },
+        "high_contrast": {
+            "name": "High Contrast",
+            "class": "max-contrast",
+            "colors": {
+                "base": "#000",
+                "option": "#fff",
+                "#highlight": "#ffd300",
+                "links": "#ffd300"
+            }
+        },
+        "protanopia": {
+            "name": "Protanopia Friendly",
+            "class": "protanopia",
+            "colors": {
+                "base": "#fff",
+                "option": "#0b0b0b",
+                "highlight": "#0072b2",
+                "links": "#0072b2"
+            }
         }
     }
 }

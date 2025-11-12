@@ -5,60 +5,95 @@ export const themes = themesData.themes;
 
 // Gets the current theme from the user's local storage or defaults to 'cream'
 function getStoredTheme() {
-    if (typeof window !== 'undefined') {
-        return localStorage.getItem('theme') || 'cream';
-    }
-    return 'cream';
+  if (typeof window !== 'undefined') {
+    try {
+      const t = localStorage.getItem('theme');
+      if (t && themes[t]) return t;
+    } catch (e) { /* ignore */ }
+  }
+  return 'cream';
 }
 
-// Export the current theme for usage in components
 export const currentTheme = writable(getStoredTheme());
 
-// Initalize the theme when the app loads
-export function initTheme() {
-    if (typeof window === 'undefined') return;
+// Apply theme colors to CSS variables and toggle theme class on documentElement
+function applyThemeVars(themeKey) {
+  if (typeof window === 'undefined') return;
+  const theme = themes[themeKey];
+  if (!theme) return;
+  const root = document.documentElement;
+  const cols = theme.colors || {};
+  root.style.setProperty('--base', cols.base ?? '');
+  root.style.setProperty('--option', cols.option ?? '');
+  root.style.setProperty('--highlight', cols.highlight ?? '');
+  root.style.setProperty('--links', cols.links ?? '');
 
-    const storedTheme = getStoredTheme();
-    setTheme(storedTheme);
+  // remove other theme classes and add this theme's class (if defined)
+  Object.values(themes).forEach(t => {
+    if (t.class) root.classList.remove(t.class);
+  });
+  if (theme.class) root.classList.add(theme.class);
+}
+
+// Initialize the theme when the app loads
+export function initTheme() {
+  if (typeof window === 'undefined') return;
+  const storedTheme = getStoredTheme();
+  currentTheme.set(storedTheme);
+  applyThemeVars(storedTheme);
 }
 
 // This function will set the theme based on the theme name provided
 export function setTheme(themeName) {
-    if (typeof window === 'undefined') return;
-
-    // Check if the theme exists in the themes object
-    const theme = themes[themeName];
-    // If the theme does not exist, do nothing
-    if (!theme) return;
-
-    // Set the CSS variables for the theme
-    // -- This was originally all defined in app.css, but can now be set dynamically
-    // -- I originally wanted to add gradient themes, but I could not get it to work.
-    const root = document.documentElement;
-    root.style.setProperty('--base', theme.colors.base);
-    root.style.setProperty('--option', theme.colors.option);
-    root.style.setProperty('--highlight', theme.colors.highlight);
-    root.style.setProperty('--links', theme.colors.links);
-
-    // Remove existing theme classes
-    Object.values(themes).forEach(t => {
-        if (t.class) {
-            document.documentElement.classList.remove(t.class);
-        }
-    });
-
-    // Add new theme class
-    if (theme.class) {
-        document.documentElement.classList.add(theme.class);
-    }
-
-    // Store the theme in local storage and update the currentTheme store
+  if (typeof window === 'undefined') return;
+  if (!themes[themeName]) return;
+  try {
     localStorage.setItem('theme', themeName);
-    currentTheme.set(themeName);
+  } catch (e) {}
+  currentTheme.set(themeName);
+  applyThemeVars(themeName);
+}
+
+// ensure theme applied immediately if running in browser
+if (typeof window !== 'undefined') {
+  initTheme();  initTheme();
+}
+
+export const fontSizes = {
+    tiny: 13,
+    small: 14,
+    default: 15,
+    plus: 16,
+    large: 18,
+    xlarge: 20,
+    huge: 22
+};
+
+function getStoredFontSize() {
+    if (typeof window === 'undefined' ) return;
+    try {
+        const v = localStorage.getItem('fontSize');
+        if (v && fontSizes[v]) return v;
+    } catch (e) {}
+    return 'default';
+}
+
+export const currentFontSize = writable(getStoredFontSize());
+
+function applyFontSize(key) {
+  if (typeof window === 'undefined') return;
+  const px = fontSizes[key] ?? fontSizes.default;
+  document.documentElement.style.setProperty('--base-font-size', px + 'px');
+}
+
+export function setFontSize(key) {
+  if (typeof window === 'undefined') return;
+  if (!fontSizes[key]) return;
+  try { localStorage.setItem('fontSize', key); } catch (e) {}
+  currentFontSize.set(key);
+  applyFontSize(key);
 }
 
 if (typeof window !== 'undefined') {
-    requestAnimationFrame(() => {
-        initTheme();
-    });
+  applyFontSize(getStoredFontSize());
 }

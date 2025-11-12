@@ -5,13 +5,14 @@
   --highlight: #ff5800;
   --links: #114D9C;
   --warning: #c91616;
+  --base-font-size: 15px;
 }
 
 /* Site-wide properties */
 html {
   background-color: var(--base);
   font-family:'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
-  font-size: 15px;
+  font-size: var(--base-font-size);
   color: var(--option);
 }
 
