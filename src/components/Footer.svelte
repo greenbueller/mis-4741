@@ -1,7 +1,3 @@
-<script>
-    export let navigateTo;
-</script>
-
 <!-- Footer Contents -->
 <footer class="app-footer">
   <hr class="footer-divider">
