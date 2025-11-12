@@ -6,20 +6,8 @@ export default defineConfig({
   plugins: [svelte()],
   server: {
     proxy: {
-      '/sendOTP': 'http://localhost:3000/',
-      '/verifyOTP': 'http://localhost:3000/',
-      '/registerUser': 'http://localhost:3000/',
-      '/updateDisplayName': 'http://localhost:3000/',
       '/submit': 'http://localhost:3000/',
-      '/entries': 'http://localhost:3000/',
-      '/deleteTask': 'http://localhost:3000/',
-      '/editTask': 'http://localhost:3000/',
-      '/complete': 'http://localhost:3000/',
-      '/logout': 'http://localhost:3000/',
-      '/recycleBin': 'http://localhost:3000/',
-      '/restoreTask': 'http://localhost:3000/',
-      '/deletePermanently': 'http://localhost:3000/',
-      '/sendEmail': 'http://localhost:3000/',
+      '/form': 'http://localhost:3000/',
     }
   },
   build: {

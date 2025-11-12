@@ -1,12 +1,10 @@
 <script>
-    import { getUserDisplayName } from "../utils/auth";
     import swal from 'sweetalert';
-    import { fade, fly } from 'svelte/transition';
+    import { fly } from 'svelte/transition';
     import { themes, currentTheme, setTheme } from '../utils/appearance.js';
 
     export let showSettings = true;
     export let settingsVisible = false;
-    export let authRequired = false;
     let isHovered = false;
 
     export function toggleSettings(e) {
@@ -19,42 +17,10 @@
         settingsVisible = false;
     }
 
-    // Essentially the same as in A3
-    export async function changeDisplayName() {
-        const currentName = getUserDisplayName() || '';
-        const newName = prompt('Enter your new display name:', currentName);
-    
-        if (newName && newName.trim() && newName !== currentName) {
-            try {
-                const res = await fetch('/updateDisplayName', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ displayName: newName.trim() })
-                });
-                const result = await res.json();
-        
-                if (result.status === 'success') {
-                    document.cookie = `displayName=${encodeURIComponent(newName.trim())}; path=/`;
-                    swal('Success', 'Display name updated successfully!', 'success')
-                        .then(() => location.reload());
-                } else {
-                    swal('Error', 'Failed to update display name. Please try again.', 'error');
-                }
-            } catch (error) {
-                swal('Error', 'Failed to update display name. Please try again.', 'error');
-            }
-        }
-    }
-
     // Set the users theme to the selected one, and close the settings menu
     function changeTheme(themeName) {
         setTheme(themeName);
         closeSettings();
-    }
-
-    // Logout function
-    export async function logout() {
-        window.location.href = '/logout';
     }
 </script>
 
@@ -84,13 +50,6 @@
                 on:keydown|stopPropagation
                 transition:fly|local="{{ y: -10, duration: 300 }}"
             >
-                <!-- Change display name, must be in authenticated page to do -->
-                {#if authRequired}
-                    <button id="displayName" class="pure-button" on:click={changeDisplayName}>
-                        Change Display Name
-                    </button>
-                    <hr>
-                {/if}
 
                 <!-- Theme Selection, visible on all pages -->
                 <div class="theme-selector">
@@ -103,18 +62,6 @@
                         > {theme.name} </button>
                     {/each}
                 </div>
-
-                <!-- Logout, must be in authenticated page to do -->
-                {#if authRequired}
-                    <hr>
-                    <button id="contact" class="pure-button" on:click={() => window.location.href = '/contact'}>
-                        Contact Us
-                    </button>
-                    <hr>
-                    <button id="logout" class="pure-button" on:click={logout}>
-                        Logout
-                    </button>
-                {/if}
             </div>
         {/if}
     </div>

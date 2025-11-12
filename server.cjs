@@ -1,16 +1,10 @@
 // Import all required modules
 const express = require('express');
 const bodyParser = require('body-parser');
-const { body, validationResult } = require('express-validator');
 const path = require('path');
 const fs = require('fs');
-const nodemailer = require('nodemailer');
 const crypto = require('crypto');
-const modRewrite = require('connect-modrewrite');
 const moment = require('moment');
-const cookieParser = require('cookie-parser')
-const { MongoClient } = require('mongodb');
-const { ObjectId } = require('mongodb');
 
 // Create the Express app
 const app = express();
@@ -22,51 +16,6 @@ require('dotenv').config();
 // Body Parser and Cookie Parser middleware for future referencing
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(cookieParser());
-
-/* MongoDB Configuration */
-const mongoURI = process.env.MONGO_URI || 'mongodb://localhost:27017/magnolia';
-const mongoClient = new MongoClient(mongoURI);
-const dbName = 'Magnolia';
-// Two different collections, one for user info and one for tasks
-let usersCollection, tasksCollection;
-
-// Connect to MongoDB
-mongoClient.connect().then(client => {
-    const db = client.db(dbName);
-    usersCollection = db.collection('users');
-    tasksCollection = db.collection('tasks');
-    binCollection = db.collection('bin');
-    console.log('Connected to MongoDB');
-}).catch(err => {
-    console.error('Failed to connect to MongoDB:', err.message);
-});
-
-// Middleware for updating a user's display name.
-app.post('/updateDisplayName', async (req, res) => {
-    // If not logged in, return a 403 forbidden/unauthorized error.
-    if (!req.cookies.auth || req.cookies.auth !== 'true' || !req.cookies.email) {
-        return res.status(403).json({ error: 'Unauthorized' });
-    }
-    const { displayName } = req.body;
-    // If the display name is invalid in some form, return a 400 bad request error.
-    if (!displayName || !displayName.trim()) {
-        return res.status(400).json({ error: 'Display name is required.' });
-    }
-    // Otherwise, get the user's email based on the cookie, and update their display name in the database.
-    const email = req.cookies.email;
-    const result = await usersCollection.updateOne(
-        { email },
-        { $set: { displayName: displayName.trim() } }
-    );
-    // If the update was successful (one user was modified), update the cookie and return a success.
-    if (result.modifiedCount === 1) {
-        res.cookie('displayName', displayName, { httpOnly: false, secure: false, maxAge: 60 * 60 * 1000 });
-        res.json({ status: 'success', message: 'Display name updated successfully.' });
-    } else {
-        res.status(500).json({ status: 'error', message: 'User not found or not updated.' });
-    }
-})
 
 /* Handle the website display and routing */
 
@@ -84,18 +33,11 @@ app.get('/robots.txt', (req, res) => {
 /* -- Prevent user from accessing protected pages if not logged in -- */
 app.use((req, res, next) => {
     // Anything that can be publicly accessed, such as registration/login pages and the associated endpoints, as well as static files
-    const publicEndpoints = ['/login', '/register', '/sendOTP', '/verifyOTP', '/registerUser', '/robots.txt', '/entries', '/submit', '/deleteTask', '/editTask', '/complete', '/updateDisplayName', '/sendEmail',];
+    const publicEndpoints = ['/form', '/robots.txt', '/submit'];
     const staticElements = req.path.startsWith('/css') || req.path.startsWith('/assets') || req.path === '/vite.svg';
     // If the request is for one of these, pass the user through.
     if (publicEndpoints.includes(req.path) || staticElements ) {
         return next();
-    }
-    // If the user is logged in, pass them through
-    if (req.cookies.auth === 'true') {
-        return next();
-    } else {
-        // Otherwise, bounce the request and send the user back to /login.
-        return res.redirect('/login');
     }
 });
 
@@ -104,193 +46,20 @@ app.get('/home', (req, res) => {
     res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-app.get('/tasks', (req, res) => {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-
-app.get('/contact', (req, res) => {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-
-/* -- Prevent logged in users from accessing login and register pages -- */
-app.use(['/login', '/register'], (req, res, next) => {
-    if (req.cookies.auth === 'true') {
-        return res.redirect('/home');
-    }
-    next();
-});
-
-app.get('/login', (req, res) => {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-
-app.get('/register', (req, res) => {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-
 /* -- Update the root directory based on if the user is logged in or not. -- */
 app.get('/', (req, res) => {
-    if (req.cookies.auth === 'true') {
-        return res.redirect('/home');
-    }
-    return res.redirect('/login');
+    return res.redirect('/home');
 });
-
-/* -- This request prevents the user from attempting to do anything if the database is not ready, mainly as a precaution. -- */
-app.use((req, res, next) => {
-    if (!usersCollection || !tasksCollection || !binCollection) {
-        return res.status(503).json({ error: 'Database not ready. Please try again later.' });
-    }
-    next();
-});
-
-/* Email Configuration */
-const confEmail = process.env.CONFIRMATION_EMAIL;
-const confPass = process.env.CONFIRMATION_PASSWORD;
-/* -- NodeMailer Transporter for OTP. Uses my custom domain's email as a base. */
-const transporter = nodemailer.createTransport({
-    service: 'Zoho',
-    port: 465,
-    secure: true,
-    auth: {
-        user: confEmail,
-        pass: confPass
-    },
-    tls: {
-        rejectUnauthorized: true
-    }
-});
-
-/* Setup for Login and Registration */
-let otp = '';
-let expiration = 0;
-
-/* -- Generates a new OTP for the user that expires after 5 minutes -- */
-const generateOTP = () => {
-    otp = crypto.randomBytes(6).toString('hex');
-    expiration = moment().add(5, 'minutes').valueOf();
-    return { code: otp, expiration };
-}
-
-/* -- Midleware that sends the OTP to the user via the provided email -- */
-app.post('/sendOTP', async (req, res) => {
-    try {
-        // Get the user's email from the endpoint request
-        const { email} = req.body;
-        // Find the associated user in the database
-        const user = await usersCollection.findOne({ email });
-        if (!user) {
-            // If the user does not exist, return a 404. Must register an account first.
-            return res.status(404).json({ status: 'error', message: 'User not found.' });
-        }
-        // Generate a new OTP
-        const { code } = generateOTP();
-
-        // Use emailTemplate.html to format the email
-        const emailTemplate = fs.readFileSync(path.join(__dirname, 'emailTemplate.html'), 'utf8');
-        // And replace the {{otp}} placeholder with the generated OTP code
-        const emailContent = emailTemplate.replace('{{otp}}', code);
-
-        // Send the email as Magnolia (alias for my custom domain email) to the user's email address
-        await transporter.sendMail({
-            from: 'Magnolia <greenbueller@greenbueller.com>',
-            to: req.body.email,
-            subject: 'Your OTP Code',
-            html: emailContent,
-            text: `Your OTP code is ${code}. It will expire in 5 minutes.`
-        });
-        // Return a success message
-        res.status(200).json({ status: 'success', message: 'OTP sent successfully.' });
-    } catch (error) {
-        // If there is an error at any point, log it and return a 500 error.
-        console.error('Error sending OTP:', error);
-        res.status(500).json({ status: 'error', message: 'Failed to send OTP.' });
-    }
-});
-
-/* -- Middleware that verifies if the OTP provided by the user is correct and not expired -- */
-app.post('/verifyOTP', async (req, res) => {
-    // Get the OTP code and email from the request body
-    const { code, email } = req.body;
-
-    // If the OTP code does not equal the server-side one, return a 403 forbidden error.
-    if (code !== otp) {
-        return res.status(403).json({ error: 'Invalid OTP code.' });
-    }
-
-    // Check if the code has expired
-    const currentTime = moment().valueOf();
-    if (currentTime > expiration) {
-        return res.status(403).json({ error: 'OTP code has expired.' });
-    }
-    // If it has not expired, check if the user exists in the database.
-    const user = await usersCollection.findOne({ email });
-    // If the user does not exist, return a 404 error.
-    if (!user) {
-        return res.status(404).json({ error: 'User not found.' });
-    }
-    // Otherwise, give the user the cookies required for accessing the website.
-    //-- Auth cookie is a boolean for if the user is logged in or not.
-    res.cookie('auth', 'true', { httpOnly: true, secure: false, maxAge: 60 * 60 * 1000 });
-    //-- Display name cookie is the user's display name, which is used to greet the user.
-    res.cookie('displayName', user.displayName, { httpOnly: false, secure: false, maxAge: 60 * 60 * 1000 });
-    //-- Email cookie is the user's email, which is used to idenftify the user in the database.
-    res.cookie('email', user.email, { httpOnly: false, secure: false, maxAge: 60 * 60 * 1000 });
-    // Return a success message.
-    res.status(200).json({ status: 'success', message: 'OTP verified successfully.' });
-});
-
-/* -- Middleware for registering a new user in the database -- */
-app.post('/registerUser', async (req, res) => {
-    const { displayName, email } = req.body;
-
-    // If a display name or email is not provided, return a 400 bad request error.
-    if (!displayName || !email) {
-        return res.status(400).json({ error: 'Display name and email are required.' });
-    }
-
-    try {
-        // Check to see if the provided email already has an associated account
-        const existing = await usersCollection.findOne( { email });
-        if (existing) {
-            return res.status(409).json({ error: 'User already exists with this email.' });
-        }
-        // Otherwise, insert the new user into the database.
-        await usersCollection.insertOne({ displayName, email });
-
-        // Reuses the same code as /sendOTP to generate a new OTP for the user.
-        const { code } = generateOTP();
-
-        const emailTemplate = fs.readFileSync(path.join(__dirname, 'emailTemplate.html'), 'utf8');
-        const emailContent = emailTemplate.replace('{{otp}}', code);
-
-        await transporter.sendMail({
-            from: 'Magnolia <greenbueller@greenbueller.com>',
-            to: req.body.email,
-            subject: 'Your OTP Code',
-            html: emailContent,
-            text: `Your OTP code is ${code}. It will expire in 5 minutes.`
-        });
-        res.status(200).json({ status: 'success', message: 'OTP sent successfully.' });
-    } catch (error) {
-        console.error('Error sending OTP:', error);
-        res.status(500).json({ status: 'error', message: 'Failed to send OTP.' });
-    }
-});
-
-/* -- Middleware for logging the user out on request -- */
-app.get('/logout', (req, res) => {
-    // Clear the cookies that were set when the user logged in.
-    res.clearCookie('auth');
-    res.clearCookie('displayName');
-    res.clearCookie('email');
-    // And redirect the user to the login page.
-    res.redirect('/login');
-})
 
 /* Handle all things tasks */
-/* -- Middleware to add a new task -- */
 app.post('/submit', async (req, res) => {
+    const { temp } = req.body;
+
+    console.log('Data entered: ', temp);
+    
+    return res.status(200).json({ status: 'success', message: 'Data received.' });
+});
+/*
     // User must be authenticated to add a task.
     if (!req.cookies.auth || req.cookies.auth !== 'true' || !req.cookies.email) {
         return res.status(403).json({ error: 'Unauthorized' });
@@ -317,263 +86,7 @@ app.post('/submit', async (req, res) => {
         res.status(500).json({ status: 'error', message: 'Failed to add task.' });
     }
 });
-
-/* -- Midleware to fetch all tasks for the user -- */
-app.get('/entries', async (req, res) => {
-    // User must be authenticated to fetch tasks.
-    if (!req.cookies.auth || req.cookies.auth !== 'true' || !req.cookies.email) {
-        return res.status(403).json({ error: 'Unauthorized' });
-    }
-    // Get the user's email from the cookie
-    const email = req.cookies.email;
-    // Get all of the tasks for the user from the database.
-    const tasks = await tasksCollection.find({ email }).toArray();
-    tasks.forEach(task => {
-        task.id = task._id.toString();
-    })
-    // Return it as a JSON response which can then be parsed in main.js
-    res.json(tasks);
-});
-
-/* -- Middleware to delete a provided array of tasks -- */
-app.post('/deleteTask', async (req, res) => {
-    // User must be authenticated to delete tasks.
-    if (!req.cookies.auth || req.cookies.auth !== 'true' || !req.cookies.email) {
-        return res.status(403).json({ error: 'Unauthorized' });
-    }
-    // Get the user's email from the cookie
-    const email = req.cookies.email;
-    // Get the array of task IDs from the request body. Any number greater than 0 is a valid number of tasks.
-    const { ids } = req.body;
-    // If the ids array is empty or not an array, return a 400 bad request error.
-    if (!Array.isArray(ids) || ids.length === 0) {
-        return res.status(400).json({ error: 'No task IDs provided.' });
-    }
-
-    try {
-        const objectIds = ids.map(id => new ObjectId(id));
-
-        const tasksToDelete = await tasksCollection.find({ _id: { $in: objectIds }, email }).toArray();
-
-        if (tasksToDelete.length === 0) {
-            return res.status(404).json({ status: 'error', message: 'No tasks found for the provided IDs.' });
-        }
-
-        const binTasks = tasksToDelete.map(task => ({
-            ...task,
-            originalId: task._id,
-            deletedAt: new Date(),
-            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-        }));
-
-        await binCollection.insertMany(binTasks);
-
-        const result = await tasksCollection.deleteMany({ _id: { $in: objectIds }, email });
-
-        if (result.deletedCount > 0) {
-            res.status(200).json({ status: 'success', message: 'Tasks deleted successfully.' });
-        } else {
-            res.status(500).json({ status: 'error', message: 'Failed to move tasks to bin.' });
-        }
-    } catch (error) {
-        console.error('Error deleting tasks:', error);
-        res.status(500).json({ status: 'error', message: 'Failed to delete tasks.' });
-    }
-});
-
-app.get('/recycleBin', async (req, res) => {
-    if (!req.cookies.auth || req.cookies.auth !== 'true' || !req.cookies.email) {
-        return res.status(403).json({ error: 'Unauthorized' });
-    }
-
-    const email = req.cookies.email;
-
-    try {
-        await binCollection.deleteMany({
-            email,
-            expiresAt: { $lt: new Date() }
-        });
-
-        const binItems = await binCollection.find({ email }).toArray();
-
-        binItems.forEach(item => {
-            item.id = item._id.toString();
-        });
-
-        res.json(binItems);
-    } catch (error) {
-        console.error('Error fetching recycle bin items:', error);
-        res.status(500).json({ status: 'error', message: 'Failed to fetch recycle bin items.' });
-    }
-});
-
-app.post('/restoreTask', async (req, res) => {
-    if (!req.cookies.auth || req.cookies.auth !== 'true' || !req.cookies.email) {
-        return res.status(403).json({ error: 'Unauthorized' });
-    }
-
-    const email = req.cookies.email;
-    const { ids } = req.body;
-
-    if (!Array.isArray(ids) || ids.length === 0) {
-        return res.status(400).json({ error: 'No task IDs provided.' });
-    }
-
-    try {
-        const objectIds = ids.map(id => new ObjectId(id));
-
-        const tasksToRestore = await binCollection.find({ _id: { $in: objectIds }, email }).toArray();
-
-        if (tasksToRestore.length === 0) {
-            return res.status(404).json({ status: 'error', message: 'No tasks found for the provided IDs.' });
-        }
-
-        const restoredTasks = tasksToRestore.map(task => {
-            const { _id, deletedAt, expiresAt, originalId, ...restoredTask } = task;
-            return restoredTask;
-        });
-
-        await tasksCollection.insertMany(restoredTasks);
-
-        const result = await binCollection.deleteMany({ _id: { $in: objectIds }, email });
-
-        if (result.deletedCount > 0) {
-            res.status(200).json({ status: 'success', message: 'Tasks restored successfully.' });
-        } else {
-            res.status(500).json({ status: 'error', message: 'Failed to restore tasks.' });
-        }
-    } catch (error) {
-        console.error('Error restoring tasks:', error);
-        res.status(500).json({ status: 'error', message: 'Failed to restore tasks.' });
-    }
-});
-
-app.post('/deletePermanently', async (req, res) => {
-    if (!req.cookies.auth || req.cookies.auth !== 'true' || !req.cookies.email) {
-        return res.status(403).json({ error: 'Unauthorized' });
-    }
-
-    const email = req.cookies.email;
-    const { ids } = req.body;
-
-    if (!Array.isArray(ids) || ids.length === 0) {
-        return res.status(400).json({ error: 'No task IDs provided.' });
-    }
-
-    try {
-        const objectIds = ids.map(id => new ObjectId(id));
-        const result = await binCollection.deleteMany({ _id: { $in: objectIds }, email });
-
-        if (result.deletedCount > 0) {
-            res.status(200).json({ status: 'success', message: 'Tasks deleted permanently.' });
-        } else {
-            res.status(404).json({ status: 'error', message: 'No tasks found for the provided IDs.' });
-        }
-    } catch(error) {
-        console.error('Error deleting tasks permanently:', error);
-        res.status(500).json({ status: 'error', message: 'Failed to delete tasks permanently.' });
-    }
-});
-
-/* -- Middleware to edit a given task -- */
-app.post('/editTask', async (req, res) => {
-    // User must be authenticated to edit tasks.
-    if (!req.cookies.auth || req.cookies.auth !== 'true' || !req.cookies.email) {
-        return res.status(403).json({ error: 'Unauthorized' });
-    }
-    // Get the task information from the request body.
-    const { id, taskName, taskDescription, taskDueDate, taskPriority } = req.body;
-    // All fields are required to edit a task, so if any are missing, return a 400 bad request error.
-    if (!id || !taskName || !taskDescription || !taskDueDate || !taskPriority) {
-        return res.status(400).json({ error: 'All fields are required.' });
-    }
-    // Edit the task in the database using the provided ID and email from the cookie.
-    const result = await tasksCollection.updateOne(
-        { _id: new ObjectId(id), email: req.cookies.email },
-        { $set: { taskName, taskDescription, taskDueDate, taskPriority } }
-    );
-    // If the update was successful, return a 200 success response.
-    if (result.modifiedCount === 1) res.json({ status: 'success', message: 'Task updated successfully.' });
-    // Otherwise, return a 404 not found error.
-    else res.status(404).json({ status: 'error', message: 'Task not found or not updated.' });
-});
-
-/* -- Middleware to update a task's completion status -- */
-app.post('/complete', async (req, res) => {
-    // User must be authenticated to update tasks.
-    if (!req.cookies.auth || req.cookies.auth !== 'true' || !req.cookies.email) {
-        return res.status(403).json({ error: 'Unauthorized' });
-    }
-    // Get the user's email from the cookie
-    const email = req.cookies.email;
-    // Get the task ID(s) and completion status from the request body.
-    const { id, completed } = req.body;
-    // If the ID is not provided, return a 400 bad request error.
-    if (!id) return res.status(400).json({ error: 'Task ID is required.' });
-    // Attempt to update the task's completion status to whatever is the opposite of it's current status in the database.
-    await tasksCollection.updateOne(
-        { _id: new ObjectId(id), email: email },
-        { $set: { completed: !!completed } }
-    );
-    // If the task was updated successfully, return a 200 success response.
-    res.status(200).json({ status: 'success', message: 'Task updated successfully.' });
-})
-
-app.post('/sendEmail', async (req, res) => {
-    if (!req.cookies.auth || req.cookies.auth !== 'true' || !req.cookies.email) {
-        return res.status(403).json({ error: 'Unauthorized' });
-    }
-
-    try {
-        const { email, displayName, subject, contents, category } = req.body;
-
-        if (!subject || !contents || !category) {
-            return res.status(400).json({ error: 'Subject, contents, and category are required.' });
-        }
-
-        if (email !== req.cookies.email) {
-            return res.status(403).json({ error: 'You can only send emails from your own account.' });
-        }
-
-        const emailTemplate = fs.readFileSync(path.join(__dirname, 'contactEmail.html'), 'utf8');
-
-        const emailContent = emailTemplate
-            .replace('{{displayName}}', displayName)
-            .replace('{{email}}', email)
-            .replace('{{category}}', category.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()))
-            .replace('{{subject}}', subject)
-            .replace('{{date}}', new Date().toLocaleString())
-            .replace('{{contents}}', contents);
-        
-            const textContent = `Magnolia Support Request
-            
-            From: ${displayName} <${email}>
-            Category: ${category.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-            Subject: ${subject}
-            Date: ${new Date().toLocaleString()}
-            
-            Message:
-            ${contents}
-            
-            ---
-            This message was sent from Magnolia's contact form.
-            `;
-
-            await transporter.sendMail({
-                from: `"Magnolia Support" <${confEmail}>`,
-                to: 'greenbueller@greenbueller.com',
-                replyTo: `"${displayName}" <${email}>`,
-                subject: `[Magnolia Support] ${category.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())} - ${subject}`,
-                html: emailContent,
-                text: textContent
-            });
-
-            res.status(200).json({ status: 'success', message: 'Email sent successfully.' });
-    } catch (error) {
-        console.error('Error sending email:', error);
-        res.status(500).json({ status: 'error', message: 'Failed to send email.' });
-    }
-});
+*/
 
 app.get('*', (req, res) => {
     res.status(404).send('Page not found');
